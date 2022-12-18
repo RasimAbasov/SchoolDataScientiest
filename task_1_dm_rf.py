@@ -51,10 +51,14 @@ df.to_excel(writer, 'Task1')
 writer.save()
 
 # Save DataFrame to pickle
-df.to_pickle("Task1_dm_rf.pkl")
+df.to_pickle('Task1_dm_rf.pkl')
 
 # Save DataFrame to DB
+df = pd.read_pickle('Task1_dm_rf.pkl')
+# change type column developer
+df['developer'] = df['developer'].astype('str')
 path = os.path.dirname(__file__)
 path_to_db = os.path.join(path, 'database_task1_dm_rf.db')
 engine = create_engine(f'sqlite:///{path_to_db}', echo=False)
 df.to_sql(name='DOM_RF_DATA', con=engine, index=False)
+df_from_db = pd.read_sql('DOM_RF_DATA', con=engine)
