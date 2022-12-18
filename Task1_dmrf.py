@@ -1,8 +1,8 @@
 import math
-import time
 
 import requests
 import pandas as pd
+from sqlalchemy import create_engine
 
 """ Задание:
         Собрать информацию о всех строящихся объектах на сайте "наш.дом.рф"
@@ -31,29 +31,30 @@ def get_houses_under_construction(offset: int = 0, limit: int = 10) -> tuple:
     return houses, res_total
 
 
-list_houses, total = get_houses_under_construction()
-# keys = list(list_houses[0].keys())
-
+_, total = get_houses_under_construction()
 # Округляем количество страниц с данными по домам (всего записей 10781, делим на limit) и находим количество страниц
 offset = 0
 limit = 1000
 cnt_offset = math.ceil(total / limit)
-list_values = []
+cnt_req = []
 for i in range(0, cnt_offset + 1):
     lst_houses, _ = get_houses_under_construction(offset=offset, limit=limit)
     print(offset, i)
-    list_values.append(lst_houses)
+    cnt_req.append(lst_houses)
     offset = offset + limit
-    # time.sleep(10)
 
-print()
-# df = pd.DataFrame(data=list_values, columns=keys)
+list_values = sum(cnt_req, [])
+df = pd.DataFrame(data=list_values)
 
-# Specify a writer
+# Save DataFrame to excel
 writer = pd.ExcelWriter('Task1_dmrf.xlsx', engine='xlsxwriter')
-
-# Write your DataFrame to a file
-# df.to_excel(writer, 'Task1')
-
-# Save the result
+df.to_excel(writer, 'Task1')
 writer.save()
+
+# Save DataFrame to pickle
+df.to_pickle("Task1_dmrf.pkl")
+
+# Save DataFrame to DB
+engine = create_engine('sqlite://', echo=False)
+df.to_sql('Dom_RF_Data', con=engine)
+print(engine.execute("SELECT * FROM Dom_RF_Data").fetchall())
