@@ -9,6 +9,7 @@ class Urls(Enum):
 
     hh_base = "https://api.hh.ru"
     vacancies = hh_base + "/vacancies"
+    vacancy = hh_base + "/vacancies/{}"
     areas = hh_base + "/areas"
 
 
