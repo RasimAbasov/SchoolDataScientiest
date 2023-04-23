@@ -1,10 +1,10 @@
 import json
 import math
 import os
+import time
 from http import HTTPStatus
 
 import requests
-
 from project.helpers.variables import Urls, Areas
 
 
@@ -48,7 +48,8 @@ class HHLoader:
             "date_from": date_from,
             "date_to": date_to
         }
-        response = requests.get(url=Urls.vacancies.value, params=params)
+        session = requests.session()
+        response = session.get(url=Urls.vacancies.value, params=params)
         assert response.status_code == HTTPStatus.OK, \
             f"Ожидаемый статус ответа: {HTTPStatus.OK}, фактический: {response.status_code}, response: {response.text}"
         response.close()
@@ -78,27 +79,29 @@ class HHLoader:
         """
         all_vacancies = self.get_all_found(date_from=date_from, date_to=date_to)
         count_pages = math.ceil(all_vacancies / self.count_vacancies_on_page)
+        pagination = os.path.normpath(os.path.join(os.getcwd(), "docs", "pagination"))
         for page in range(0, count_pages + 1):
             data = self.get_page(page=page, date_from=date_from, date_to=date_to)
             if data['items']:
-                path = os.path.normpath(os.path.join(os.getcwd(), "docs", "pagination",
-                                                     f"page_{page}_{date_from.replace(':', '-')}.json"))
+                path = os.path.join(pagination, f"page_{page}_{date_from.replace(':', '-')}.json")
                 print(f'page_{page}_{date_from}-{date_to}')
-
                 f = open(file=path, mode='w', encoding='utf-8')
                 f.write(json.dumps(obj=data, ensure_ascii=False))
                 f.close()
+            time.sleep(0.5)
 
     @staticmethod
-    def get_vacancy(vacancy_id: int) -> dict:
+    def get_vacancy(vacancy_id: int | str) -> dict:
         # Обращаемся к API и получаем детальную информацию по конкретной вакансии
-        response = requests.get(url=Urls.vacancy.value.format(vacancy_id))
+        session = requests.session()
+        response = session.get(url=Urls.vacancy.value.format(vacancy_id))
+        response.close()
         assert response.status_code == HTTPStatus.OK, \
             f"Ожидаемый статус ответа: {HTTPStatus.OK}, фактический: {response.status_code}, response: {response.text}"
-        response.close()
-        return response.json()
+        return response is None
 
-    def upload_vacancy_in_file(self):
+    @staticmethod
+    def get_vacancy_id_from_pages():
         """
         Получаем перечень ранее созданных файлов в pagination со списком вакансий и проходимся по нему в цикле,
         сохраняем содержимое
@@ -107,20 +110,35 @@ class HHLoader:
         """
 
         pagination = os.path.normpath(os.path.join(os.getcwd(), "docs", "pagination"))
-        vacancies = os.path.normpath(os.path.join(os.getcwd(), "docs", "vacancies"))
+        file_vacancies_ids = os.path.normpath(os.path.join(os.getcwd(), "docs", "ids_vacancies.txt"))
         for file in os.listdir(pagination):
             f = open(file=os.path.join(pagination, file), encoding='utf-8')
             json_text = f.read()
             f.close()
 
             json_obj = json.loads(json_text)
-
-            # Получаем и проходимся по непосредственно списку вакансий
+            # Получаем и проходимся по непосредственно списку вакансий.
+            end_file = open(file=file_vacancies_ids, mode='a+', encoding='utf-8')
             for value in json_obj['items']:
-                data = self.get_vacancy(vacancy_id=value['id'])
                 # Создаем файл в формате json с идентификатором вакансии в качестве названия.
                 # Записываем в него ответ запроса и закрываем файл.
-                file_name = os.path.join(vacancies, f"id_{value['id']}.json")
-                f = open(file=file_name, mode='w', encoding='utf-8')
-                f.write(json.dumps(obj=data, ensure_ascii=False))
+                end_file.write(f"{value['id']}\n")
+            end_file.close()
+
+    def write_vacancy_in_file(self):
+        vacancies = os.path.normpath(os.path.join(os.getcwd(), "docs", "vacancies"))
+        file_vacancies_ids = os.path.normpath(os.path.join(os.getcwd(), "docs", "ids_vacancies.txt"))
+        f = open(file=file_vacancies_ids, encoding='utf-8')
+        text = f.read()
+        f.close()
+        list_ids = text.split('\n')[:-1]
+        for vacancy_id in list_ids:
+            file_name = f"id_{vacancy_id}.json"
+            if file_name not in os.listdir(vacancies):
+                file_path = os.path.join(vacancies, file_name)
+                print(file_name)
+                response = self.get_vacancy(vacancy_id=vacancy_id)
+                f = open(file=file_path, mode='w', encoding='utf-8')
+                f.write(json.dumps(obj=response, ensure_ascii=False))
                 f.close()
+                time.sleep(0.5)
