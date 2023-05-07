@@ -5,10 +5,16 @@ import time
 from http import HTTPStatus
 
 import requests
-from project.helpers.variables import Urls, Areas
+
+from project.helpers.variables import Areas
+from project.helpers.variables import Dirs
+from project.helpers.variables import Urls
 
 
-class HHLoader:
+# https://github.com/hhru/api/blob/master/docs/general.md
+
+
+class VacancyLoader:
     """ Class для выгрузки вакансий """
     def __init__(self, text_filter: str | None = None,
                  area: Areas = Areas.Moscow, count_vacancies_on_page: int = 100) -> None:
@@ -36,7 +42,7 @@ class HHLoader:
             date_to: дата публикации "до"
             page: номер страницы
 
-        Returns: словарь с вакансиями
+        Returns: словарь с вакансиями на странице
 
         """
 
@@ -69,21 +75,20 @@ class HHLoader:
 
     def get_all_vacancies(self, date_from: str, date_to: str) -> None:
         """
-
+        Функция сохраняет вакансии со страницы в файл, полученные после запроса
         Args:
             date_from: дата публикации "от"
             date_to: дата публикации "до"
 
-        Returns:
-
         """
         all_vacancies = self.get_all_found(date_from=date_from, date_to=date_to)
         count_pages = math.ceil(all_vacancies / self.count_vacancies_on_page)
-        pagination = os.path.normpath(os.path.join(os.getcwd(), "docs", "pagination"))
+        # Создаем папку pages, на случай ее отсутствия
+        os.makedirs(name=Dirs.PAGES_VACANCIES.value, exist_ok=True)
         for page in range(0, count_pages + 1):
             data = self.get_page(page=page, date_from=date_from, date_to=date_to)
             if data['items']:
-                path = os.path.join(pagination, f"page_{page}_{date_from.replace(':', '-')}.json")
+                path = os.path.join(Dirs.PAGES_VACANCIES.value, f"page_{page}_{date_from.replace(':', '-')}.json")
                 print(f'page_{page}_{date_from}-{date_to}')
                 f = open(file=path, mode='w', encoding='utf-8')
                 f.write(json.dumps(obj=data, ensure_ascii=False))
@@ -92,50 +97,55 @@ class HHLoader:
 
     @staticmethod
     def get_vacancy(vacancy_id: int | str) -> dict:
-        # Обращаемся к API и получаем детальную информацию по конкретной вакансии
+        """
+        Обращаемся к API и получаем детальную информацию по конкретной вакансии
+        Args:
+            vacancy_id: id вакансии
+
+        Returns:
+            Данные по вакансии
+        """
         session = requests.session()
         response = session.get(url=Urls.vacancy.value.format(vacancy_id))
         response.close()
         assert response.status_code == HTTPStatus.OK, \
             f"Ожидаемый статус ответа: {HTTPStatus.OK}, фактический: {response.status_code}, response: {response.text}"
-        return response is None
+        return response.json()
 
     @staticmethod
     def get_vacancy_id_from_pages():
         """
-        Получаем перечень ранее созданных файлов в pagination со списком вакансий и проходимся по нему в цикле,
+        Получаем перечень ранее созданных файлов в pages со списком вакансий и проходимся по нему в цикле,
         сохраняем содержимое
-        Returns:
 
         """
-
-        pagination = os.path.normpath(os.path.join(os.getcwd(), "docs", "pagination"))
-        file_vacancies_ids = os.path.normpath(os.path.join(os.getcwd(), "docs", "ids_vacancies.txt"))
-        for file in os.listdir(pagination):
-            f = open(file=os.path.join(pagination, file), encoding='utf-8')
+        for file in os.listdir(path=Dirs.PAGES_VACANCIES.value):
+            f = open(file=os.path.join(Dirs.PAGES_VACANCIES.value, file), encoding='utf-8')
             json_text = f.read()
             f.close()
 
             json_obj = json.loads(json_text)
             # Получаем и проходимся по непосредственно списку вакансий.
-            end_file = open(file=file_vacancies_ids, mode='a+', encoding='utf-8')
+            end_file = open(file=Dirs.FILE_VACANCIES_IDS.value, mode='a+', encoding='utf-8')
             for value in json_obj['items']:
-                # Создаем файл в формате json с идентификатором вакансии в качестве названия.
-                # Записываем в него ответ запроса и закрываем файл.
+                # Записываем все id вакансий в один файл.
                 end_file.write(f"{value['id']}\n")
             end_file.close()
 
-    def write_vacancy_in_file(self):
-        vacancies = os.path.normpath(os.path.join(os.getcwd(), "docs", "vacancies"))
-        file_vacancies_ids = os.path.normpath(os.path.join(os.getcwd(), "docs", "ids_vacancies.txt"))
-        f = open(file=file_vacancies_ids, encoding='utf-8')
+    def write_vacancy_in_file(self) -> None:
+        """
+        Функция сохраняет данные по вакансии в файл
+
+        """
+        os.makedirs(name=Dirs.VACANCIES.value, exist_ok=True)
+        f = open(file=Dirs.FILE_VACANCIES_IDS.value, encoding='utf-8')
         text = f.read()
         f.close()
         list_ids = text.split('\n')[:-1]
         for vacancy_id in list_ids:
             file_name = f"id_{vacancy_id}.json"
-            if file_name not in os.listdir(vacancies):
-                file_path = os.path.join(vacancies, file_name)
+            if file_name not in os.listdir(path=Dirs.VACANCIES.value):
+                file_path = os.path.join(Dirs.VACANCIES.value, file_name)
                 print(file_name)
                 response = self.get_vacancy(vacancy_id=vacancy_id)
                 f = open(file=file_path, mode='w', encoding='utf-8')
